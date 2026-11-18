@@ -1,0 +1,15 @@
+{
+  "backend": [
+    "eventwatcher.js",
+    "eventwatcher/client/staff.js",
+    "eventwatcher/client/staff.min.js",
+    "eventwatcher/client/staff.css",
+    "eventwatcher/client/staff.min.css"
+  ],
+  "css": [],
+  "ejs": [
+    "event-watcher.ejs"
+  ],
+  "js": [],
+  "npm": []
+}

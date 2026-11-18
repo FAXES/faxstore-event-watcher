@@ -1,0 +1,131 @@
+<%- include('../staff/__header', {title: 'Event Watcher'}) %>
+<%# Icons are written out in full so the FaxStore icon build keeps them %>
+<% const ICONS = {releaseCreate: 'fa-code-branch', checkoutReturn: 'fa-cart-shopping', reviewCreated: 'fa-star', invoiceCreated: 'fa-file-invoice', invoicePaid: 'fa-file-invoice-dollar', subscriptionInvoiceCreated: 'fa-arrows-rotate', quoteAccepted: 'fa-handshake', createUserAccount: 'fa-user-plus', formSubmitted: 'fa-clipboard-list', blogpostCreate: 'fa-newspaper'}; %>
+<% const groups = [...new Set(ew.events.map(e => e.group))]; %>
+<% const channelName = id => ew.channels.find(c => c.id === id)?.name; %>
+<% const status = e => !e.enabled ? 'Off' : [e.discordChannel && '#' + (channelName(e.discordChannel) || e.discordChannel), e.pushover && 'Pushover'].filter(Boolean).join(' + ') || 'Nowhere to send'; %>
+<%# Switch: the hidden input sends "false" when unchecked, the checkbox's "true" wins when checked. Help is fixed text from this file, so it can hold a link. %>
+<% function toggle(name, checked, label, help) { %>
+                <div class="ew-field">
+                    <div>
+                        <label class="ew-field-label" for="ew-<%= name %>"><%= label %></label>
+                        <% if(help) { %><p class="ew-field-help"><%- help %></p><% } %>
+                    </div>
+                    <div class="ew-field-control ew-field-end">
+                        <label class="ew-switch"><input type="hidden" name="<%= name %>" value="false"><input type="checkbox" id="ew-<%= name %>" name="<%= name %>" value="true" <%= checked ? 'checked' : '' %>><span class="ew-switch-track" aria-hidden="true"></span></label>
+                    </div>
+                </div>
+<% } %>
+<%# Channel or role picker, a plain ID box when the bot isn't connected %>
+<% function pick(name, value, list, empty, prefix, label, id) { %>
+    <% if(list.length) { %>
+        <select name="<%= name %>" <% if(id) { %>id="<%= id %>"<% } else { %>aria-label="<%= label %>"<% } %>>
+            <option value=""><%= empty %></option>
+            <% if(value && !list.find(i => i.id === value)) { %><option value="<%= value %>" selected>Unknown (<%= value %>)</option><% } %>
+            <% list.forEach(function(i) { %><option value="<%= i.id %>" <%= i.id === value ? 'selected' : '' %>><%= prefix %><%= i.name %></option><% }); %>
+        </select>
+    <% } else { %>
+        <input type="text" name="<%= name %>" value="<%= value %>" maxlength="25" inputmode="numeric" placeholder="<%= label %> ID" <% if(id) { %>id="<%= id %>"<% } else { %>aria-label="<%= label %>"<% } %>>
+    <% } %>
+<% } %>
+<% function productRow(event, p) { %>
+                        <div class="ew-product">
+                            <select name="<%= event %>.productID" aria-label="Product">
+                                <option value="">Choose a product</option>
+                                <% if(p.productID && !ew.products.find(pr => Number(pr.id) === Number(p.productID))) { %><option value="<%= p.productID %>" selected>Unknown product (<%= p.productID %>)</option><% } %>
+                                <% ew.products.forEach(function(pr) { %><option value="<%= pr.id %>" <%= Number(pr.id) === Number(p.productID) ? 'selected' : '' %>><%= pr.title %></option><% }); %>
+                            </select>
+                            <input type="color" name="<%= event %>.productColor" value="<%= p.embedColor %>" aria-label="Embed colour">
+                            <% pick(event + '.productRole', p.roleID || '', ew.roles, 'Same as event', '@', 'Role to mention') %>
+                            <% pick(event + '.productChannel', p.channelID || '', ew.channels, 'Same as event', '#', 'Discord channel') %>
+                            <button type="button" class="ew-remove" data-remove-product aria-label="Remove override"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+<% } %>
+<link rel="stylesheet" href="<%= ew.assets.css %>">
+
+<div class="ew" id="ewPage">
+    <div class="ew-head">
+        <h2><i class="fa-solid fa-binoculars"></i> Event Watcher</h2>
+        <p class="ew-intro">Send store events to your Discord channels and to Pushover. Pick an event, choose where it goes, then save.</p>
+    </div>
+
+    <% if(!ew.discordReady) { %>
+        <div class="ew-banner"><p>Your Discord bot isn't connected, so channels and roles can't be listed. You can still enter their IDs, or check your <a href="/staff/integrations">Discord integration</a>.</p></div>
+    <% } %>
+
+    <form id="ewForm" class="ew-config" method="post" action="/backend/event-watcher/configure" autocomplete="off">
+        <input type="hidden" name="tab" value="<%= ew.tab %>">
+
+        <nav class="ew-nav" role="tablist" aria-label="Events">
+            <% groups.forEach(function(group) { %>
+                <span class="ew-nav-group"><%= group %></span>
+                <% ew.events.filter(e => e.group === group).forEach(function(e) { %>
+                    <button type="button" role="tab" class="ew-tab" data-tab-btn="<%= e.name %>">
+                        <i class="fa-solid <%= ICONS[e.name] %>"></i>
+                        <span class="ew-tab-text"><strong><%= e.label %></strong><small><%= status(e) %></small></span>
+                        <span class="ew-dot <%= e.enabled ? 'ew-dot-on' : '' %>" aria-hidden="true"></span>
+                    </button>
+                <% }); %>
+            <% }); %>
+        </nav>
+
+        <div class="ew-main">
+            <% ew.events.forEach(function(e) { %>
+                <div class="ew-panel" data-tab="<%= e.name %>" role="tabpanel" hidden>
+                    <section class="ew-card">
+                        <header class="ew-card-head ew-card-head-action">
+                            <div><h3><%= e.label %></h3><p><%= e.help %> FaxStore event: <code><%= e.name %></code></p></div>
+                            <button type="button" class="tableButton" data-test="<%= e.name %>">Send a test</button>
+                        </header>
+                        <% toggle(e.name + '.enabled', e.enabled, 'Watch this event', 'When off, nothing is sent for it.') %>
+                    </section>
+
+                    <section class="ew-card">
+                        <header class="ew-card-head"><h3>Discord</h3><p>Posted as an embed by your FaxStore bot.</p></header>
+                        <div class="ew-field">
+                            <div><label class="ew-field-label" for="ew-<%= e.name %>-channel">Channel</label><p class="ew-field-help">The bot needs permission to post here.</p></div>
+                            <div class="ew-field-control"><% pick(e.name + '.discordChannel', e.discordChannel, ew.channels, 'Don\'t post to Discord', '#', 'Discord channel', 'ew-' + e.name + '-channel') %></div>
+                        </div>
+                        <div class="ew-field">
+                            <div><label class="ew-field-label" for="ew-<%= e.name %>-role">Role to mention</label><p class="ew-field-help">The role is pinged above the embed.</p></div>
+                            <div class="ew-field-control"><% pick(e.name + '.roleID', e.roleID, ew.roles, 'No mention', '@', 'Role', 'ew-' + e.name + '-role') %></div>
+                        </div>
+                        <div class="ew-field">
+                            <div><label class="ew-field-label" for="ew-<%= e.name %>-color">Embed colour</label></div>
+                            <div class="ew-field-control ew-color"><input type="color" id="ew-<%= e.name %>-color" name="<%= e.name %>.embedColor" value="<%= e.embedColor %>"></div>
+                        </div>
+                    </section>
+
+                    <section class="ew-card">
+                        <header class="ew-card-head"><h3>Pushover</h3><p>A push notification to your phone or desktop, sent through the Pushover app.</p></header>
+                        <% toggle(e.name + '.pushover', e.pushover, 'Send to Pushover', ew.pushoverReady ? null : 'The Pushover app isn\'t installed. <a href="/staff/apps?app=pushover">Get it from Explore Apps</a>.') %>
+                    </section>
+
+                    <% if(e.products) { %>
+                        <section class="ew-card">
+                            <header class="ew-card-head ew-card-head-action">
+                                <div><h3>Product overrides</h3><p>Use a different colour, role or channel for these products.</p></div>
+                                <button type="button" class="tableButton" data-add-product="<%= e.name %>">Add product</button>
+                            </header>
+                            <div class="ew-products" data-products="<%= e.name %>">
+                                <div class="ew-products-head"><span>Product</span><span>Colour</span><span>Role</span><span>Channel</span><span></span></div>
+                                <p class="ew-products-empty">No overrides. Every product uses the settings above.</p>
+                                <% e.customProducts.forEach(function(p) { productRow(e.name, p); }); %>
+                            </div>
+                        </section>
+                    <% } %>
+                </div>
+            <% }); %>
+
+            <div class="ew-savebar" id="ewSavebar">
+                <span id="ewSaveState">All changes saved</span>
+                <button type="submit" class="buttonSmall buttonGreen">Save settings</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<template id="ewProductRow"><% productRow('__EVENT__', {embedColor: '#FDF35E'}) %></template>
+<script id="ewData" type="application/json"><%- JSON.stringify({tab: ew.tab}).replace(/</g, '\\u003c') %></script>
+<script src="<%= ew.assets.js %>" defer></script>
+<%- include('../staff/__footer') %>
