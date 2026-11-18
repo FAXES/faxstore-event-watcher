@@ -1,4 +1,9 @@
 {
+  "id": "event-watcher",
+  "name": "Event Watcher",
+  "author": "FAXES",
+  "version": "1.0.0",
+  "faxstore": "3.4.0",
   "backend": [
     "eventwatcher.js",
     "eventwatcher/client/staff.js",

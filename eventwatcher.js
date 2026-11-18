@@ -1,7 +1,6 @@
 const config = require('../config.json');
 const fs = require('fs');
 const path = require('path');
-const express = require('express');
 const { log } = require('../src/utils/log');
 
 const VERSION = '1.0.0';
@@ -9,7 +8,7 @@ const APP_ID = 'event-watcher';
 
 const DATABASE = [
     {
-        condition: `SHOW TABLES LIKE 'app_eventwatcher_events'`,
+        table: 'app_eventwatcher_events',
         action: `CREATE TABLE app_eventwatcher_events(
             id INT NOT NULL AUTO_INCREMENT,
             name VARCHAR(64) NOT NULL,
@@ -174,6 +173,8 @@ const EVENTS = {
 };
 
 module.exports = async function(app, connection, bot, faxstore) {
+    // The helpers below arrived in FaxStore 3.4.0. Older versions ignore the manifest's minimum version, so check here too.
+    if(typeof faxstore.apps.migrate !== 'function') return log(`@BOLD@RED[EVENT WATCHER]: @RESETEvent Watcher needs FaxStore 3.4.0 or newer. Update FaxStore to use it.`);
     db = connection.promise();
 
     // Register FaxStore App
@@ -191,12 +192,7 @@ module.exports = async function(app, connection, bot, faxstore) {
     // Build & Update Database
     setTimeout(async () => {
         try {
-            for(const e of DATABASE) {
-                const [rows] = await db.query(e.condition);
-                if(rows.length) continue;
-                await db.query(e.action);
-                for(const sub of e.subactions || []) await db.query(sub);
-            }
+            await faxstore.apps.migrate(APP_ID, DATABASE);
 
             // Stores that used the old Release Watcher config get it copied across once
             const legacy = path.join(__dirname, 'configs', 'releaseWatcher.json');
@@ -212,8 +208,8 @@ module.exports = async function(app, connection, bot, faxstore) {
     }, 2000);
 
     // Staff page assets, the minified copies are used outside developer mode
-    app.use('/eventwatcher/assets', express.static(path.join(__dirname, 'eventwatcher', 'client'), {index: false}));
-    const asset = file => `/eventwatcher/assets/${config.siteInformation?.developerMode ? file : file.replace('.', '.min.')}?v=${VERSION}`;
+    const assets = faxstore.apps.assets(APP_ID, path.join(__dirname, 'eventwatcher', 'client'), {route: '/eventwatcher/assets'});
+    const asset = file => assets.url(file);
 
     // Push notifications go through the Pushover app. It's looked up each time as apps load in parallel.
     const pushover = () => {
